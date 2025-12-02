@@ -1,0 +1,7 @@
+{
+  "name": "vOx Oratória",
+  "description": "An AI-powered public speaking coach that provides instant, actionable feedback on your oratory skills. Record your speech, get it transcribed, and receive a detailed analysis of clarity, filler words, rhythm, and impact.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
