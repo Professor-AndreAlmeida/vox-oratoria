@@ -211,7 +211,7 @@ export const Recorder: React.FC<RecorderProps> = ({
       setRecordingState('error');
       return;
     }
-    const ai = new GoogleGenAI({ apiKey });
+    const ai = new GoogleGenAI({ apiKey: apiKey ?? undefined });
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
