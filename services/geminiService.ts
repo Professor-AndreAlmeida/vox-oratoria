@@ -331,7 +331,7 @@ export async function analyzeSession(
         config: { responseMimeType: 'application/json', responseSchema: analysisReportSchema }
     });
 
-    const analysisReport: AnalysisReport = cleanAndParseJSON(response.text);
+    const analysisReport: AnalysisReport = cleanAndParseJSON(response.text ?? '{}');
 
     const newSession: Session = {
         id: crypto.randomUUID(),
@@ -383,7 +383,7 @@ export async function analyzePracticeAttempt(
         config: { responseMimeType: 'application/json', responseSchema: analysisReportSchema }
     });
     
-    const analysisReport: AnalysisReport = cleanAndParseJSON(response.text);
+    const analysisReport: AnalysisReport = cleanAndParseJSON(response.text ?? '{}');
 
     const newAttempt: PracticeAttempt = {
         id: crypto.randomUUID(),
@@ -434,7 +434,7 @@ export async function analyzeSkillDrillAttempt(
                 }
             }
         });
-        return cleanAndParseJSON(response.text);
+        return cleanAndParseJSON(response.text ?? '{}');
     } catch (e) {
         console.error("Failed to parse skill drill analysis:", e);
         return { success: false, feedback: "Não foi possível analisar a sua tentativa. Tente novamente." };
@@ -465,7 +465,7 @@ export async function startQASession(transcript: string, persona: Persona): Prom
 
 export async function sendAnswerToQASession(chat: Chat, answer: string): Promise<string> {
     const result = await chat.sendMessage({ message: answer });
-    return result.text;
+    return result.text ?? '';
 }
 
 export async function generateSkillDrillExercise(goalType: GoalType): Promise<SkillDrillExercise[]> {
@@ -567,7 +567,7 @@ export async function generateChallenge(sessions: Session[], challenges: Challen
         }
     });
 
-    const challengeData = cleanAndParseJSON<Omit<Challenge, 'id' | 'status'>>(response.text);
+    const challengeData = cleanAndParseJSON<Omit<Challenge, 'id' | 'status'>>(response.text ?? '{}');
 
     return {
         id: crypto.randomUUID(),
@@ -639,7 +639,7 @@ export async function generateNextStepSuggestion(session: Session): Promise<Next
                 responseSchema: nextStepSuggestionSchema
             }
         });
-        return cleanAndParseJSON(response.text);
+        return cleanAndParseJSON(response.text ?? 'null');
     } catch (error) {
         console.error("Error generating next step suggestion:", error);
         return null;
@@ -677,7 +677,7 @@ export async function generateSuggestionFromQA(interactions: QAInteraction[], an
         });
 
         // The text property exists, but might contain markdown. Clean it.
-        const text = response.text.trim();
+        const text = (response.text ?? 'null').trim();
         if (text.toLowerCase() === 'null') return null;
         
         return cleanAndParseJSON(text) as NextStepSuggestion;
@@ -718,7 +718,7 @@ export async function generateWeeklySummary(sessions: Session[]): Promise<string
         model: 'gemini-2.5-flash',
         contents: prompt,
     });
-    return response.text;
+    return response.text ?? '';
 }
 
 
@@ -782,7 +782,7 @@ export async function getHelpFromVoxAgent(userQuestion: string): Promise<AgentRe
         }
     });
 
-    return cleanAndParseJSON(response.text);
+    return cleanAndParseJSON(response.text ?? '{}');
 }
 
 
@@ -806,7 +806,11 @@ export async function generatePulpitImage(prompt: string): Promise<string> {
             outputMimeType: 'image/png',
         },
     });
-    return response.generatedImages[0].image.imageBytes;
+    const imageBytes = response.generatedImages?.[0]?.image?.imageBytes;
+    if (!imageBytes) {
+        throw new Error('Nenhuma imagem foi gerada.');
+    }
+    return imageBytes;
 }
 
 const proactiveSuggestionSchema = {
@@ -869,7 +873,7 @@ export async function generateProactiveSuggestions(
             }
         });
 
-        const suggestions: ProactiveSuggestion[] = cleanAndParseJSON(response.text);
+        const suggestions: ProactiveSuggestion[] = cleanAndParseJSON(response.text ?? '[]');
         return suggestions.filter(s => script.includes(s.originalText));
 
     } catch (error) {

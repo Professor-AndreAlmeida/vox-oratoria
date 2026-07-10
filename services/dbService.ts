@@ -53,6 +53,11 @@ export const addSession = async (session: Session): Promise<void> => {
   await db.add(SESSIONS_STORE, session);
 };
 
+export const upsertSession = async (session: Session): Promise<void> => {
+  const db = await dbPromise;
+  await db.put(SESSIONS_STORE, session);
+};
+
 export const updateSession = async (session: Session): Promise<void> => {
   const db = await dbPromise;
   await db.put(SESSIONS_STORE, session);
@@ -74,6 +79,11 @@ export const addChallenge = async (challenge: Challenge): Promise<void> => {
     await db.add(CHALLENGES_STORE, challenge);
 };
 
+export const upsertChallenge = async (challenge: Challenge): Promise<void> => {
+    const db = await dbPromise;
+    await db.put(CHALLENGES_STORE, challenge);
+};
+
 export const updateChallenge = async (challenge: Challenge): Promise<void> => {
     const db = await dbPromise;
     await db.put(CHALLENGES_STORE, challenge);
@@ -93,6 +103,11 @@ export const getAllPersonas = async (): Promise<Persona[]> => {
 export const addPersona = async (persona: Persona): Promise<void> => {
     const db = await dbPromise;
     await db.add(PERSONAS_STORE, persona);
+};
+
+export const upsertPersona = async (persona: Persona): Promise<void> => {
+    const db = await dbPromise;
+    await db.put(PERSONAS_STORE, persona);
 };
 
 export const updatePersona = async (persona: Persona): Promise<void> => {

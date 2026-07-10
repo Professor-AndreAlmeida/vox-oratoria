@@ -53,6 +53,28 @@ O terminal mostrará um link (geralmente `http://localhost:5173`). Abra-o no nav
 - **/services**: Lógica de conexão com a IA (`geminiService`) e banco de dados local (`dbService`).
 - **/contexts**: Gerenciamento de estado global (Usuário, Sessão, Gamificação).
 
+## ☁️ Backup no Google Drive
+
+O backup local continua sendo o fluxo principal. A integração com Google Drive é opcional e só aparece quando o OAuth estiver configurado no ambiente.
+
+Crie um arquivo `.env.local` a partir de `.env.example`:
+
+```env
+VITE_GOOGLE_CLIENT_ID=
+VITE_GOOGLE_PICKER_API_KEY=
+VITE_GOOGLE_APP_ID=
+```
+
+No Google Cloud Console:
+
+1. Habilite a Google Drive API.
+2. Habilite a Google Picker API.
+3. Crie um OAuth Client ID do tipo Web application.
+4. Adicione os domínios em Authorized JavaScript origins, por exemplo `http://localhost:5173` em desenvolvimento.
+5. Use apenas o escopo `https://www.googleapis.com/auth/drive.file`.
+
+Nunca coloque client secrets, tokens OAuth ou chaves reais em commits. O token do Google Drive é mantido apenas em memória durante o uso da página.
+
 ## 🤝 Contribuindo
 
 Contribuições são muito bem-vindas!

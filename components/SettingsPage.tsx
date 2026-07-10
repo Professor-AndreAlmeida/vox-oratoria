@@ -9,7 +9,20 @@ import { useSettings } from '../contexts/SettingsContext';
 import { useSession } from '../contexts/SessionContext';
 import { useGamification } from '../contexts/GamificationContext';
 import { useToast } from './common/Toast';
-import * as db from '../services/dbService';
+import {
+  buildBackupPayload,
+  createBackupFileName,
+  readBackupFile,
+  restoreBackupPayload,
+  stringifyBackupPayload,
+} from '../services/backupService';
+import {
+  downloadBackupFromDrive,
+  exportBackupToDrive,
+  isGoogleDriveBackupConfigured,
+  isGooglePickerConfigured,
+  pickBackupFromDrive,
+} from '../services/googleDriveBackupService';
 
 interface SettingsPageProps {
   usageStats: UsageStats;
@@ -20,6 +33,8 @@ const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ chi
     {children}
   </div>
 );
+
+type BackupAction = 'export-local' | 'import-local' | 'export-drive' | 'import-drive' | null;
 
 const coachStyleOptions: { id: User['coachStyle'], label: string, description: string }[] = [
     { id: 'encouraging', label: 'Encorajador', description: 'Foco em pontos fortes e motivação.' },
@@ -53,7 +68,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ usageStats }) => {
   const [showApiKey, setShowApiKey] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [selectedCoachStyle, setSelectedCoachStyle] = useState<User['coachStyle']>(user?.coachStyle || 'encouraging');
+  const [backupAction, setBackupAction] = useState<BackupAction>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isDriveConfigured = isGoogleDriveBackupConfigured();
+  const isPickerConfigured = isGooglePickerConfigured();
 
   useEffect(() => {
     setApiKey(getApiKey() || '');
@@ -75,26 +93,15 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ usageStats }) => {
       updateUser({ ...user, coachStyle: style });
   };
 
-  const handleExportData = async () => {
+  const handleExportLocalData = async () => {
+      setBackupAction('export-local');
       try {
-          const sessions = await db.getAllSessions();
-          const challenges = await db.getAllChallenges();
-          const personas = await db.getAllPersonas();
-
-          const dataToExport = {
-              version: 2, // Version bump since goals removed
-              timestamp: new Date().toISOString(),
-              sessions,
-              challenges,
-              personas,
-              userSettings: user
-          };
-
-          const blob = new Blob([JSON.stringify(dataToExport, null, 2)], { type: 'application/json' });
+          const backup = await buildBackupPayload(user);
+          const blob = new Blob([stringifyBackupPayload(backup)], { type: 'application/json' });
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
-          a.download = `vox-backup-${new Date().toISOString().split('T')[0]}.json`;
+          a.download = createBackupFileName();
           document.body.appendChild(a);
           a.click();
           document.body.removeChild(a);
@@ -103,45 +110,75 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ usageStats }) => {
       } catch (error) {
           console.error("Export error:", error);
           showToast("Erro ao exportar dados.", 'error');
+      } finally {
+          setBackupAction(null);
       }
   };
 
-  const handleImportClick = () => {
+  const handleImportLocalClick = () => {
       fileInputRef.current?.click();
   };
 
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
+      setBackupAction('import-local');
 
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-          try {
-              const json = JSON.parse(event.target?.result as string);
-              
-              if (json.sessions) {
-                  for (const s of json.sessions) await db.addSession(s);
-              }
-              if (json.challenges) {
-                  for (const c of json.challenges) await db.addChallenge(c);
-              }
-              if (json.personas) {
-                  for (const p of json.personas) await db.addPersona(p);
-              }
-              if (json.userSettings && user) {
-                  await updateUser({ ...user, ...json.userSettings });
-              }
-
-              showToast("Dados importados com sucesso! Atualize a página.", 'success');
-              // Opcional: window.location.reload();
-          } catch (error) {
-              console.error("Import error:", error);
-              showToast("Arquivo de backup inválido ou corrompido.", 'error');
+      try {
+          const backup = await readBackupFile(file);
+          if (!confirm(`Importar backup com ${backup.sessions.length} sessões, ${backup.challenges.length} desafios e ${backup.personas.length} personas? Dados com o mesmo ID serão atualizados.`)) {
+              return;
           }
-      };
-      reader.readAsText(file);
-      // Reset input
-      e.target.value = '';
+
+          const summary = await restoreBackupPayload(backup, user, updateUser);
+          showToast(`Backup importado: ${summary.sessions} sessões, ${summary.challenges} desafios e ${summary.personas} personas.`, 'success');
+          window.location.reload();
+      } catch (error) {
+          console.error("Import error:", error);
+          showToast("Arquivo de backup inválido ou corrompido.", 'error');
+      } finally {
+          setBackupAction(null);
+          e.target.value = '';
+      }
+  };
+
+  const handleExportDriveData = async () => {
+      setBackupAction('export-drive');
+      try {
+          const backup = await buildBackupPayload(user);
+          const file = await exportBackupToDrive(backup);
+          showToast(`Backup salvo no Google Drive: ${file.name}`, 'success');
+      } catch (error) {
+          console.error("Drive export error:", error);
+          showToast(error instanceof Error ? error.message : "Erro ao exportar para o Google Drive.", 'error');
+      } finally {
+          setBackupAction(null);
+      }
+  };
+
+  const handleImportDriveData = async () => {
+      setBackupAction('import-drive');
+      try {
+          const file = await pickBackupFromDrive();
+          if (!file) {
+              showToast("Importação do Google Drive cancelada.", 'error');
+              return;
+          }
+
+          const backup = await downloadBackupFromDrive(file.id);
+          if (!confirm(`Importar "${file.name}" com ${backup.sessions.length} sessões, ${backup.challenges.length} desafios e ${backup.personas.length} personas? Dados com o mesmo ID serão atualizados.`)) {
+              return;
+          }
+
+          const summary = await restoreBackupPayload(backup, user, updateUser);
+          showToast(`Backup importado do Drive: ${summary.sessions} sessões, ${summary.challenges} desafios e ${summary.personas} personas.`, 'success');
+          window.location.reload();
+      } catch (error) {
+          console.error("Drive import error:", error);
+          showToast(error instanceof Error ? error.message : "Erro ao importar do Google Drive.", 'error');
+      } finally {
+          setBackupAction(null);
+      }
   };
 
   const handleFactoryReset = async () => {
@@ -265,18 +302,37 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ usageStats }) => {
                 <p className="text-text-secondary mb-6 text-sm">
                     Como o vOx roda localmente no seu navegador, é importante fazer backups regulares para não perder seu progresso se limpar o cache.
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Button variant="outline" onClick={handleExportData} className="w-full flex items-center gap-2">
-                        <Download className="w-4 h-4" /> Exportar Dados
-                    </Button>
-                    <Button variant="outline" onClick={handleImportClick} className="w-full flex items-center gap-2">
-                        <CloudUploadIcon className="w-4 h-4" /> Importar Backup
-                    </Button>
+                <div className="space-y-5">
+                    <div>
+                        <p className="text-sm font-bold uppercase tracking-wide text-text-secondary mb-3">Backup local</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <Button variant="outline" onClick={handleExportLocalData} className="w-full flex items-center gap-2" disabled={backupAction !== null}>
+                                {backupAction === 'export-local' ? <LoadingIcon className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} Exportar para arquivo
+                            </Button>
+                            <Button variant="outline" onClick={handleImportLocalClick} className="w-full flex items-center gap-2" disabled={backupAction !== null}>
+                                {backupAction === 'import-local' ? <LoadingIcon className="w-4 h-4 animate-spin" /> : <CloudUploadIcon className="w-4 h-4" />} Importar de arquivo
+                            </Button>
+                        </div>
+                    </div>
+                    <div>
+                        <p className="text-sm font-bold uppercase tracking-wide text-text-secondary mb-3">Google Drive</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <Button variant="outline" onClick={handleExportDriveData} className="w-full flex items-center gap-2" disabled={!isDriveConfigured || backupAction !== null}>
+                                {backupAction === 'export-drive' ? <LoadingIcon className="w-4 h-4 animate-spin" /> : <CloudIcon className="w-4 h-4" />} Exportar para Drive
+                            </Button>
+                            <Button variant="outline" onClick={handleImportDriveData} className="w-full flex items-center gap-2" disabled={!isDriveConfigured || !isPickerConfigured || backupAction !== null}>
+                                {backupAction === 'import-drive' ? <LoadingIcon className="w-4 h-4 animate-spin" /> : <CloudUploadIcon className="w-4 h-4" />} Importar do Drive
+                            </Button>
+                        </div>
+                        {!isDriveConfigured && (
+                            <p className="text-xs text-muted-foreground mt-3">Google Drive indisponível nesta instalação.</p>
+                        )}
+                    </div>
                     <input 
                         type="file" 
                         ref={fileInputRef} 
                         onChange={handleImportFile} 
-                        accept=".json" 
+                        accept=".json,application/json"
                         className="hidden" 
                     />
                 </div>

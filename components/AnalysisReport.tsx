@@ -136,6 +136,10 @@ interface InteractiveTranscriptProps {
     onToggleTooltip: (content: string, rect: DOMRect) => void;
 }
 
+type TranscriptSegment =
+    | { type: 'text'; content: string }
+    | { type: 'event'; content: string; event: any };
+
 type TooltipState = {
     content: string;
     top: number;
@@ -144,11 +148,11 @@ type TooltipState = {
 } | null;
 
 const InteractiveTranscript: React.FC<InteractiveTranscriptProps> = ({ transcript, events, onToggleTooltip }) => {
-    const segments = useMemo(() => {
+    const segments = useMemo<TranscriptSegment[]>(() => {
         if (!events || events.length === 0) return [{ type: 'text' as const, content: transcript }];
         const sortedEvents = [...(events || [])];
         sortedEvents.sort((a, b) => transcript.indexOf(a.text) - transcript.indexOf(b.text));
-        const result: { type: 'text' | 'event'; content: string; event?: any }[] = [];
+        const result: TranscriptSegment[] = [];
         let lastIndex = 0;
         sortedEvents.forEach(event => {
             if (!event.text) return;
@@ -169,7 +173,7 @@ const InteractiveTranscript: React.FC<InteractiveTranscriptProps> = ({ transcrip
     return (
         <p className="text-lg leading-relaxed">
             {segments.map((segment, index) =>
-                segment.type === 'event' ? (
+                segment.type === 'event' && segment.event ? (
                     <span
                         key={index}
                         className={getEventClassName(segment.event.eventType)}
@@ -421,7 +425,7 @@ const AnalysisReportComponent: React.FC<AnalysisReportProps> = ({
     const points: string[] = [];
     if (!displayedReport) return points;
 
-    if (displayedReport.clareza?.nota >= 8) {
+    if ((displayedReport.clareza?.nota ?? 0) >= 8) {
         points.push("Excelente clareza na comunicação, facilitando a compreensão da mensagem.");
     }
 
@@ -431,13 +435,13 @@ const AnalysisReportComponent: React.FC<AnalysisReportProps> = ({
         points.push("Discurso limpo e direto, sem o uso de vícios de linguagem.");
     }
 
-    if (displayedReport.estrutura?.abertura.nota >= 8) {
+    if ((displayedReport.estrutura?.abertura?.nota ?? 0) >= 8) {
         points.push("A abertura do discurso foi forte e capturou a atenção inicial.");
     }
-    if (displayedReport.estrutura?.desenvolvimento.nota >= 8) {
+    if ((displayedReport.estrutura?.desenvolvimento?.nota ?? 0) >= 8) {
         points.push("O desenvolvimento do tema foi bem estruturado e coeso.");
     }
-    if (displayedReport.estrutura?.conclusao.nota >= 8) {
+    if ((displayedReport.estrutura?.conclusao?.nota ?? 0) >= 8) {
         points.push("A conclusão foi eficaz e resumiu bem os pontos principais.");
     }
     
@@ -456,8 +460,8 @@ const AnalysisReportComponent: React.FC<AnalysisReportProps> = ({
     const points: string[] = [];
     if (!displayedReport) return points;
 
-    if (displayedReport.clareza?.nota < 5) {
-        points.push(`A clareza geral da mensagem pode ser melhorada. (${displayedReport.clareza.justificativa})`);
+    if ((displayedReport.clareza?.nota ?? 10) < 5) {
+        points.push(`A clareza geral da mensagem pode ser melhorada. (${displayedReport.clareza?.justificativa || 'Sem justificativa detalhada.'})`);
     }
 
     const fillerWordsCount = (displayedReport.palavrasPreenchimento || []).reduce((acc, curr) => acc + curr.contagem, 0);
@@ -475,17 +479,17 @@ const AnalysisReportComponent: React.FC<AnalysisReportProps> = ({
         points.push(displayedReport.pausas.analise);
     }
 
-    if (displayedReport.estrutura?.abertura.nota < 5) {
-        points.push(`Abertura: ${displayedReport.estrutura.abertura.analise}`);
+    if ((displayedReport.estrutura?.abertura?.nota ?? 10) < 5) {
+        points.push(`Abertura: ${displayedReport.estrutura?.abertura?.analise || 'Sem análise detalhada.'}`);
     }
-    if (displayedReport.estrutura?.desenvolvimento.nota < 5) {
-        points.push(`Desenvolvimento: ${displayedReport.estrutura.desenvolvimento.analise}`);
+    if ((displayedReport.estrutura?.desenvolvimento?.nota ?? 10) < 5) {
+        points.push(`Desenvolvimento: ${displayedReport.estrutura?.desenvolvimento?.analise || 'Sem análise detalhada.'}`);
     }
-    if (displayedReport.estrutura?.conclusao.nota < 5) {
-        points.push(`Conclusão: ${displayedReport.estrutura.conclusao.analise}`);
+    if ((displayedReport.estrutura?.conclusao?.nota ?? 10) < 5) {
+        points.push(`Conclusão: ${displayedReport.estrutura?.conclusao?.analise || 'Sem análise detalhada.'}`);
     }
     
-    if (points.length === 0 && displayedReport.clareza?.nota < 8) {
+    if (points.length === 0 && (displayedReport.clareza?.nota ?? 10) < 8 && displayedReport.clareza?.justificativa) {
         points.push(displayedReport.clareza.justificativa);
     }
 
@@ -579,7 +583,7 @@ const AnalysisReportComponent: React.FC<AnalysisReportProps> = ({
                      <Card>
                         <CardHeader icon={<Sparkles className="w-6 h-6"/>} title="Próximos Passos e Ações" />
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                             <button onClick={() => onPractice(session, sessionForActions.relatorio.textoOtimizado)} className="flex items-center gap-3 p-4 bg-slate-700/50 hover:bg-slate-700 rounded-lg transition-colors text-left">
+                             <button onClick={() => onPractice(session, sessionForActions.relatorio.textoOtimizado || '')} className="flex items-center gap-3 p-4 bg-slate-700/50 hover:bg-slate-700 rounded-lg transition-colors text-left">
                                 <OptimizedTextIcon className="w-8 h-8"/>
                                 <div><h4 className="font-semibold">Praticar Versão Otimizada</h4><p className="text-xs text-text-secondary">Treine com o texto da IA.</p></div>
                             </button>
